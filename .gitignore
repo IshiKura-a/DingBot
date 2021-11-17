@@ -2,3 +2,8 @@ config.json
 
 .idea
 .vscode
+
+input
+record.log
+
+__pycache__
