@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from urllib.parse import quote
 import re
 import sys
 from datetime import datetime, timedelta, time
@@ -45,7 +46,7 @@ LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 if args.test:
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=LOG_FORMAT)
 else:
-    logging.basicConfig(filename='record.log', level=logging.DEBUG, format=LOG_FORMAT, filemode='a')
+    logging.basicConfig(filename='record.log', level=logging.INFO, format=LOG_FORMAT, filemode='a')
 
 
 def schedule_listener(event):
@@ -109,13 +110,13 @@ def raise_question():
                 'time': upload_time
             })
 
-    logging.debug(f'Got {len(data)} new questions')
+    logging.info(f'Got {len(data)} new questions')
     questions = process_map(util.download, data)
 
     for i in range(len(questions)):
         send_msg('markdown', {
             "title": f'[朋辈辅学] {data[i]["time"].strftime("%Y-%m-%d %H:%M:%S")}',
-            "text": questions[i].replace('\r\n', '\n') + f'\n\n原文链接：[链接]({data[i]["href"]})'
+            "text": questions[i].replace('\r\n', '\n') + f'\n\n原文链接：[链接]({quote(data[i]["href"], safe="/:?=&")})'
         })
 
     config['question_timestamp'] = current_time
@@ -222,7 +223,7 @@ def inform():
 
 
 if __name__ == '__main__':
-    logging.debug(args)
+    logging.info(args)
     if args.test:
         raise_question()
         inform()
