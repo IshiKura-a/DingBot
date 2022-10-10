@@ -116,7 +116,7 @@ def raise_question():
     for i in range(len(questions)):
         send_msg('markdown', {
             "title": f'[朋辈辅学] {data[i]["time"].strftime("%Y-%m-%d %H:%M:%S")}',
-            "text": questions[i].replace('\r\n', '\n') + f'\n\n原文链接：[链接]({quote(data[i]["href"], safe="/:?=&")})'
+            "text": questions[i].replace('\r\n', '\n')
         })
 
     config['question_timestamp'] = current_time
@@ -138,8 +138,6 @@ def get_curricula():
                 start_h += 12
                 end_h += 12
             place = line[3]
-            course = re.compile(r'(.+)（.{2,4}）').findall(line[4])[0]
-            teacher = re.compile(r'（(.{2,4})）').findall(line[4])[0]
             students = line[5].split('、')
             start = time(start_h, start_m, 0, 0)
             end = time(end_h, end_m, 0, 0)
@@ -222,19 +220,62 @@ def inform():
     return
 
 
+def information_remind():
+    last_time = read_log()
+    current_time = datetime.now(tz.gettz('Asia/Shanghai')).strftime("%Y-%m-%d %H:%M:%S")
+    data_url = config['questionnaire_url']
+    page = requests.get(data_url).content.decode(encoding='UTF-8')
+    soup = BeautifulSoup(page, features="html.parser")
+    table = soup.find(attrs={'class': 'table-content'}).find_all('tr')[1:]
+    data = []
+    for row in table:
+        tb = []
+        for column in row.find_all('td'):
+            result = column.find('div')
+            tb.append(result.attrs['title'])
+        upload_time = util.parse_time(tb[3])
+        if last_time is None or last_time < upload_time:
+            data.append({
+                'time': upload_time,
+                'start_time': datetime.strptime(tb[0], "%Y-%m-%d %H:%M") - timedelta(minutes=5),
+                'end_time': datetime.strptime(tb[1], "%Y-%m-%d %H:%M"),
+                "course_name": tb[2]
+            })
+
+    logging.info(f'Got {len(data)} new courses')
+    logging.info(data)
+
+    for task in data:
+        schedule.add_job(send_msg, trigger=None, next_run_time=task['start_time'], args=('markdown', {
+            "title": f'[朋辈辅学] {task["time"].strftime("%Y-%m-%d %H:%M:%S")}',
+            "text": str(task['course_name']) + " 课程将在五分钟后开始哟~"
+        }))
+        schedule.add_job(send_msg, trigger=None, next_run_time=task['end_time'], args=('text', {
+            "title": f'[朋辈辅学] {task["time"].strftime("%Y-%m-%d %H:%M:%S")}',
+            "content": '欢迎大家填写问卷反馈[送花花]\nhttps://jinshuju.net/f/VoPZf4'
+        }))
+    schedule.print_jobs()
+    config['question_timestamp'] = current_time
+    json.dump(config, open('config.json', 'w'))
+    return
+
+
 if __name__ == '__main__':
     logging.info(args)
+
     if args.test:
-        raise_question()
-        inform()
+        schedule.add_job(information_remind, 'interval', minutes=5, next_run_time=datetime.now())
+        schedule.print_jobs()
+        schedule.start()
     else:
         if start_time.time() > time(8, 0, 0, 0):
             run_time = datetime.combine(start_time.date() + timedelta(days=1), time(8, 0, 0, 0))
         else:
             run_time = datetime.combine(start_time.date(), time(8, 0, 0, 0))
 
-        schedule.add_listener(schedule_listener, EVENT_JOB_ERROR)
-        schedule.add_job(raise_question, 'interval', minutes=10, next_run_time=datetime.now())
-        schedule.add_job(inform, 'interval', days=1, next_run_time=run_time)
+        #schedule.add_listener(schedule_listener, EVENT_JOB_ERROR)
+        #schedule.add_job(raise_question, 'interval', minutes=10, next_run_time=datetime.now())
+        # schedule.add_job(inform, 'interval', days=1, next_run_time=run_time)
+        schedule.add_job(information_remind, 'interval', minutes=5, next_run_time=datetime.now())
         schedule.print_jobs()
         schedule.start()
