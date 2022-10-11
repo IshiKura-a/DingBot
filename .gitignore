@@ -3,7 +3,8 @@ config.json
 .idea
 .vscode
 
-input
-record.log
+input/*
+config/*
+log/*
 
 __pycache__

@@ -3,6 +3,7 @@ from datetime import datetime, date, time, timedelta
 from dateutil import tz
 
 
+# 某一门课程
 class Curriculum:
     def __init__(self, is_single, weekday, start, end, place, name, teacher, students):
         self.is_single = is_single
@@ -19,6 +20,7 @@ class Curriculum:
                      self.students)
 
 
+# 具体某一天的某一节课
 class Class(Curriculum):
     def __init__(self, cur_date, is_single, weekday, start, end, place, name, teacher, students):
         super().__init__(is_single, weekday, start, end, place, name, teacher, students)
@@ -51,20 +53,6 @@ class Shift:
     def __init__(self, source, target):
         self.source = source
         self.target = target
-
-    @staticmethod
-    def get_shift():
-        shifts = []
-        try:
-            with open('./input/shift.csv', 'r', encoding='UTF-8') as f:
-                for line in f.readlines():
-                    line = line.strip().split(',')
-                    source, target = ShiftInfo(*line[0:4]), ShiftInfo(*line[4:8])
-                    shifts.append(Shift(source, target))
-        except FileNotFoundError:
-            pass
-        finally:
-            return shifts
 
 
 def cal_single(ref_date, cur_single, target_date):
