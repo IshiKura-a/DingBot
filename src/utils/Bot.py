@@ -6,6 +6,7 @@ import re
 import sys
 import urllib3
 
+from abc import abstractmethod
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, time
@@ -16,11 +17,16 @@ from src.utils import util
 from src.utils.Curriculum import Curriculum, Shift, ShiftInfo, cal_single
 
 
+def start():
+    Bot.scheduler.start()
+
+
 class Bot:
     LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+    scheduler = BlockingScheduler(timezone='Asia/Shanghai')
 
     def __init__(self, config_path: str, test_flag: bool):
-        self.scheduler = BlockingScheduler(timezone='Asia/Shanghai')
+        self.config_path = config_path
         self.test = test_flag
 
         try:
@@ -33,7 +39,7 @@ class Bot:
                 assert self.config['access_token'] is not None
                 assert self.config['secret'] is not None
         except FileNotFoundError:
-            logging.critical('config.json not found!')
+            logging.critical(config_path + ' not found!')
             exit(1)
         except AssertionError:
             logging.critical('invalid config file: ' + config_path)
@@ -71,6 +77,10 @@ class Bot:
             logging.error(f'Snapshot:\n{str(content)[0:50]}...\n推送失败!')
             logging.error(result)
 
+    @abstractmethod
+    def schedule(self):
+        pass
+
 
 class QuestionBot(Bot):
 
@@ -89,7 +99,7 @@ class QuestionBot(Bot):
         else:
             return util.parse_time(self.config['last_question_timestamp'])
 
-    def raise_question(self):
+    def check_question(self):
         last_time = self.get_last_question_time()
         current_time = datetime.now(tz.gettz('Asia/Shanghai')).strftime("%Y-%m-%d %H:%M:%S")
         data_url = self.config['questionnaire_url']
@@ -124,11 +134,60 @@ class QuestionBot(Bot):
             })
 
         self.config['last_question_timestamp'] = current_time
-        json.dump(self.config, open('config.json', 'w'))
+        json.dump(self.config, open(self.config_path, 'w'))
+
+        next_check_time = self.get_next_check_time()
+        Bot.scheduler.add_job(self.check_question, 'date', next_run_time=next_check_time)
+
+    def raise_question(self):
+        self.send_msg('markdown', {
+            "title": f'[朋辈辅学问题收集】',
+            "text": "又到周末啦，相信大家都过了充实的一周呢~\n"
+                    "小朋友们有没有遇到新的问题呀，欢迎大家随时提问~\n"
+                    "[提问链接]https://jinshuju.net/f/xW193K\n"
+                    "祝大家周末愉快！[撒花]"
+        })
+        next_raise_time = self.get_next_question_time()
+        Bot.scheduler.add_job(self.raise_question, 'date', next_run_time=next_raise_time)
+
+    def get_next_question_time(self):
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        day, hour = current_time.day, current_time.hour
+        if day != 5:  # Not Friday
+            day_to_friday = (11 - current_time.weekday()) % 7
+            next_raise_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(18, 0, 0))
+        else:
+            if hour < 20:
+                next_raise_time = datetime.combine(current_time.date(), time(18, 0, 0))
+            else:
+                next_raise_time = datetime.combine(current_time.date() + timedelta(days=7), time(18, 0, 0))
+        return next_raise_time
+
+    def get_next_check_time(self):
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        hour, minute = current_time.hour, current_time.minute
+        if hour < 16:
+            next_check_time = datetime.combine(current_time.date(), time(16, 0, 0))
+        elif hour < 22:
+            if minute >= 50:
+                next_check_time = datetime.combine(current_time.date(), time(hour + 1, 0, 0))
+            else:
+                next_check_time = datetime.combine(current_time.date(), time(hour, (minute // 10 + 1) * 10, 0))
+        else:  # hour >= 22
+            next_check_time = datetime.combine(current_time.date() + timedelta(days=1), time(16, 0, 0))
+        return next_check_time
 
     def schedule(self):
-        self.scheduler.add_job(self.raise_question, 'interval', minutes=10, next_run_time=datetime.now())
-        self.scheduler.start()
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        if self.test:
+            Bot.scheduler.add_job(self.raise_question, 'date', next_run_time=current_time)
+            Bot.scheduler.add_job(self.check_question, 'interval', minutes=3, next_run_time=current_time)
+        else:
+            next_question_time = self.get_next_question_time()
+            Bot.scheduler.add_job(self.raise_question, 'date', next_run_time=next_question_time)
+
+            next_check_time = self.get_next_check_time()
+            Bot.scheduler.add_job(self.check_question, 'date', next_run_time=next_check_time)
 
 
 class CourseReMinderBot(Bot):
@@ -136,7 +195,6 @@ class CourseReMinderBot(Bot):
     def __init__(self, config_path: str, test_flag: bool):
         super(CourseReMinderBot, self).__init__(config_path, test_flag)
         self.start_time = datetime.now(tz.gettz('Asia/Shanghai'))  # used for check 单双周
-        self.config_path = config_path
         self.class_list = []
 
         try:
@@ -243,7 +301,7 @@ class CourseReMinderBot(Bot):
         if len(today_class) > 0:
             self.send_msg('text', {
                 'content': f'早安[比心], 今天一共有{len(today_class)}门课:\n\n' + '\n'.join([
-                    f'{i + 1}. {cur.name + ("（调课）" if cur.shifted else "")}[{cur.teacher}][{cur.place}, {cur.start.strftime("%H:%M")}:{cur.end.strftime("%H:%M")}]\n学生: {"、".join(cur.students)}\n'
+                    f'{i + 1}. {cur.name + ("（调课）" if cur.shifted else "")}[{cur.teacher}][{cur.place}, {cur.start.strftime("%H:%M")} - {cur.end.strftime("%H:%M")}]\n学生: {"、".join(cur.students)}\n'
                     for i, cur in enumerate(today_class)
                 ]) + '\n大家要准时上课哦[天使]'
             }, at={'isAtAll': True})
@@ -253,15 +311,67 @@ class CourseReMinderBot(Bot):
             })
 
         for i in today_class:
-            self.scheduler.add_job(
+            Bot.scheduler.add_job(
                 self.send_msg, 'date',
-                next_run_time=datetime.combine(i.date, i.start,
-                                               tzinfo=tz.gettz('Asia/Shanghai')) - timedelta(
-                    minutes=15),
+                next_run_time=datetime.combine(i.date, i.start, tzinfo=tz.gettz('Asia/Shanghai')) - timedelta(minutes=15),
                 args=['text', {
                     'content': f'课程: {i.name}[{i.teacher}][{i.place}, {i.start.strftime("%H:%M")}-{i.end.strftime("%H:%M")}]即将开始，老师同学们不要忘啦[微笑]'
                 }])
+        next_inform_time = self.get_next_inform_time()
+        Bot.scheduler.add_job(self.inform, 'date', next_run_time=next_inform_time)
+
+    def raise_feedback(self):
+        self.send_msg('markdown', {
+            "title": f'[朋辈辅学反馈收集】',
+            "text": "本周的课程都结束啦~\n"
+                    "欢迎大家填写问卷反馈[送花花]\n"
+                    "https://jinshuju.net/f/VoPZf4"
+        })
+        next_feedback_time = self.get_next_feedback_time()
+        Bot.scheduler.add_job(self.raise_feedback, 'date', next_run_time=next_feedback_time)
+
+    def get_next_inform_time(self):
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        day, hour = current_time.day, current_time.hour
+        if day < 4:  # Monday - Thursday
+            day_to_friday = (11 - current_time.weekday()) % 7
+            next_inform_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(8, 0, 0))
+        elif 5 <= day < 6:
+            if hour < 8:
+                next_inform_time = datetime.combine(current_time.date(), time(8, 0, 0))
+            else:
+                next_inform_time = datetime.combine(current_time.date() + timedelta(days=1), time(8, 0, 0))
+        else:  # Sunday
+            if hour < 8:
+                next_inform_time = datetime.combine(current_time.date(), time(8, 0, 0))
+            else:
+                day_to_friday = (11 - current_time.weekday()) % 7
+                next_inform_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(8, 0, 0))
+        return next_inform_time
+
+    def get_next_feedback_time(self):
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        day, hour = current_time.day, current_time.hour
+        if day != 6:  # Not Sunday
+            day_to_sunday = 6 - current_time.weekday()
+            next_feedback_time = datetime.combine(current_time.date() + timedelta(days=day_to_sunday), time(20, 0, 0))
+        else:
+            if hour < 20:
+                next_feedback_time = datetime.combine(current_time.date(), time(20, 0, 0))
+            else:
+                next_feedback_time = datetime.combine(current_time.date() + timedelta(days=7), time(20, 0, 0))
+        return next_feedback_time
 
     def schedule(self):
-        self.scheduler.add_job(self.inform, 'interval', minutes=10, next_run_time=datetime.now())
-        self.scheduler.start()
+        current_time = datetime.now(tz.gettz('Asia/Shanghai'))
+        if self.test:
+            Bot.scheduler.add_job(self.raise_feedback, 'date', next_run_time=current_time)
+            Bot.scheduler.add_job(self.inform, 'date', next_run_time=current_time)
+            # Bot.scheduler.add_job(self.raise_feedback, 'interval', minutes=5, next_run_time=current_time)
+            # Bot.scheduler.add_job(self.inform, 'interval', minutes=5, next_run_time=current_time)
+        else:
+            next_feed_back_time = self.get_next_feedback_time()
+            Bot.scheduler.add_job(self.raise_feedback, 'date', next_run_time=next_feed_back_time)
+
+            next_inform_time = self.get_next_inform_time()
+            Bot.scheduler.add_job(self.inform, 'date', next_run_time=next_inform_time)
