@@ -29,7 +29,7 @@ def main():
                         title, str(sheet.cell(2, j).value), time, classroom[j - 2], course, students
                     ])
 
-    with open('../../input/timetable.csv', 'w', encoding='UTF-8') as f:
+    with open(args.output, 'w', encoding='UTF-8') as f:
         for line in classes:
             print(",".join(line), file=f)
     return

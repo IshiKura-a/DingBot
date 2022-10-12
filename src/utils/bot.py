@@ -14,15 +14,15 @@ from dateutil import tz
 from tqdm.contrib.concurrent import process_map
 
 from src.utils import util
-from src.utils.Curriculum import Curriculum, Shift, ShiftInfo, cal_single
+from src.utils.curriculum import Curriculum, Shift, ShiftInfo, cal_single
 
 
 def start():
+    Bot.scheduler.print_jobs()
     Bot.scheduler.start()
 
 
 class Bot:
-    LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
     scheduler = BlockingScheduler(timezone='Asia/Shanghai')
 
     def __init__(self, config_path: str, test_flag: bool):
@@ -31,7 +31,6 @@ class Bot:
 
         try:
             self.config = json.load(open(config_path, 'r'))
-            assert self.config['log_path'] is not None
             if test_flag:
                 assert self.config['test_access_token'] is not None
                 assert self.config['test_secret'] is not None
@@ -46,9 +45,12 @@ class Bot:
             exit(1)
 
         if test_flag:
-            logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=Bot.LOG_FORMAT)
+            logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+                                format='%(asctime)s - %(levelname)s - %(message)s')
         else:
-            logging.basicConfig(filename=self.config['log_path'], level=logging.INFO, format=Bot.LOG_FORMAT, filemode='a')
+            logging.basicConfig(handlers=[logging.FileHandler(filename="log/record.log", encoding='utf-8', mode='a+')],
+                                level=logging.INFO,
+                                format='%(asctime)s - %(levelname)s - %(message)s')
 
     # 向钉钉群推送消息
     def send_msg(self, msg_type, content, at=None):
@@ -140,24 +142,24 @@ class QuestionBot(Bot):
         Bot.scheduler.add_job(self.check_question, 'date', next_run_time=next_check_time)
 
     def raise_question(self):
-        self.send_msg('markdown', {
+        self.send_msg('text', {
             "title": f'[朋辈辅学问题收集】',
-            "text": "又到周末啦，相信大家都过了充实的一周呢~\n"
-                    "小朋友们有没有遇到新的问题呀，欢迎大家随时提问~\n"
-                    "[提问链接]https://jinshuju.net/f/xW193K\n"
-                    "祝大家周末愉快！[撒花]"
+            "content": "又到周末啦，相信大家都过了充实的一周呢~\n"
+                       "小朋友们有没有遇到新的问题呀，欢迎大家随时提问~\n"
+                       "[提问链接]https://jinshuju.net/f/xW193K\n"
+                       "祝大家周末愉快！[撒花]"
         })
         next_raise_time = self.get_next_question_time()
         Bot.scheduler.add_job(self.raise_question, 'date', next_run_time=next_raise_time)
 
     def get_next_question_time(self):
         current_time = datetime.now(tz.gettz('Asia/Shanghai'))
-        day, hour = current_time.day, current_time.hour
-        if day != 5:  # Not Friday
-            day_to_friday = (11 - current_time.weekday()) % 7
+        weekday, hour = current_time.weekday(), current_time.hour
+        if weekday != 4:  # Not Friday
+            day_to_friday = (11 - weekday) % 7
             next_raise_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(18, 0, 0))
         else:
-            if hour < 20:
+            if hour < 18:
                 next_raise_time = datetime.combine(current_time.date(), time(18, 0, 0))
             else:
                 next_raise_time = datetime.combine(current_time.date() + timedelta(days=7), time(18, 0, 0))
@@ -287,8 +289,7 @@ class CourseReMinderBot(Bot):
                     if i.weekday == source.date.weekday() and i.start == source.start and i.place == source.place \
                             and i.is_single == cal_single(current_time.date(), self.config['is_single_now'],
                                                           source.date):
-                        logging.info(
-                            f'{i.name}（{i.place}） shifted from {source.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
+                        logging.info(f'{i.name}（{i.place}） shifted from {source.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
                         new_class = i.get_class(current_time.date())
                         new_class.start = shift.target.start
                         new_class.end = shift.target.end
@@ -321,22 +322,22 @@ class CourseReMinderBot(Bot):
         Bot.scheduler.add_job(self.inform, 'date', next_run_time=next_inform_time)
 
     def raise_feedback(self):
-        self.send_msg('markdown', {
+        self.send_msg('text', {
             "title": f'[朋辈辅学反馈收集】',
-            "text": "本周的课程都结束啦~\n"
-                    "欢迎大家填写问卷反馈[送花花]\n"
-                    "https://jinshuju.net/f/VoPZf4"
+            "content": "本周的课程都结束啦~\n"
+                       "欢迎大家填写问卷反馈[送花花]\n"
+                       "[反馈连接]https://jinshuju.net/f/VoPZf4"
         })
         next_feedback_time = self.get_next_feedback_time()
         Bot.scheduler.add_job(self.raise_feedback, 'date', next_run_time=next_feedback_time)
 
     def get_next_inform_time(self):
         current_time = datetime.now(tz.gettz('Asia/Shanghai'))
-        day, hour = current_time.day, current_time.hour
-        if day < 4:  # Monday - Thursday
-            day_to_friday = (11 - current_time.weekday()) % 7
+        week_day, hour = current_time.weekday(), current_time.hour
+        if week_day < 4:  # Monday - Thursday
+            day_to_friday = (11 - week_day) % 7
             next_inform_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(8, 0, 0))
-        elif 5 <= day < 6:
+        elif 4 <= week_day < 6:
             if hour < 8:
                 next_inform_time = datetime.combine(current_time.date(), time(8, 0, 0))
             else:
@@ -345,15 +346,15 @@ class CourseReMinderBot(Bot):
             if hour < 8:
                 next_inform_time = datetime.combine(current_time.date(), time(8, 0, 0))
             else:
-                day_to_friday = (11 - current_time.weekday()) % 7
+                day_to_friday = (11 - week_day) % 7
                 next_inform_time = datetime.combine(current_time.date() + timedelta(days=day_to_friday), time(8, 0, 0))
         return next_inform_time
 
     def get_next_feedback_time(self):
         current_time = datetime.now(tz.gettz('Asia/Shanghai'))
-        day, hour = current_time.day, current_time.hour
-        if day != 6:  # Not Sunday
-            day_to_sunday = 6 - current_time.weekday()
+        week_day, hour = current_time.weekday(), current_time.hour
+        if week_day != 6:  # Not Sunday
+            day_to_sunday = 6 - week_day
             next_feedback_time = datetime.combine(current_time.date() + timedelta(days=day_to_sunday), time(20, 0, 0))
         else:
             if hour < 20:

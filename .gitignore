@@ -3,8 +3,9 @@ config.json
 .idea
 .vscode
 
-input/*
 config/*
+input/*
 log/*
+samples/*
 
 __pycache__
