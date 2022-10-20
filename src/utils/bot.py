@@ -246,7 +246,7 @@ class CourseReMinderBot(Bot):
             with open(self.config['shifts_path'], 'r', encoding='UTF-8') as f:
                 for line in f.readlines():
                     line = line.strip().split(',')
-                    source, target = ShiftInfo(*line[0:4]), ShiftInfo(*line[4:8])
+                    source, target = ShiftInfo(*line[0:5]), ShiftInfo(line[0], *line[5:9])
                     shifts.append(Shift(source, target))
         except FileNotFoundError:
             pass
@@ -274,7 +274,7 @@ class CourseReMinderBot(Bot):
             target = shift.target
             # 当日课程调换到后面
             for i in self.class_list:
-                if source.date == i.date and source.start == i.start and source.place == i.place:
+                if source.course == i.name and source.date == i.date and source.start == i.start and source.place == i.place:
                     logging.info(
                         f'{i.name} shifted from {i.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
                     i.date = target.date
@@ -283,12 +283,10 @@ class CourseReMinderBot(Bot):
                     i.place = target.place
                     i.shifted = True
 
-            # 后面的课程调换到今天
+            # 其他课程调换到今天
             if target.date == current_time.date():
                 for i in curricula:
-                    if i.weekday == source.date.weekday() and i.start == source.start and i.place == source.place \
-                            and i.is_single == cal_single(current_time.date(), self.config['is_single_now'],
-                                                          source.date):
+                    if i.name == source.course and i.weekday == source.date.weekday() and i.start == source.start and i.place == source.place:
                         logging.info(f'{i.name}（{i.place}） shifted from {source.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
                         new_class = i.get_class(current_time.date())
                         new_class.start = shift.target.start

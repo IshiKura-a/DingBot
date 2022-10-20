@@ -39,7 +39,9 @@ class Class(Curriculum):
 
 
 class ShiftInfo:
-    def __init__(self, date_info, start, end, place):
+    def __init__(self, course, date_info, start, end, place):
+
+        self.course = course
         self.date = datetime.strptime(date_info, "%Y-%m-%d").replace(
             tzinfo=tz.gettz('Asia/Shanghai')).date()
         self.start = datetime.strptime(start, "%H:%M").replace(
