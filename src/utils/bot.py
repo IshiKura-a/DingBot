@@ -200,7 +200,7 @@ class CourseReMinderBot(Bot):
         self.class_list = []
 
         try:
-            assert self.config['is_single_now'] is not None
+            assert self.config['first_single_day'] is not None
             assert self.config['corpus_path'] is not None
             assert self.config['curricula_path'] is not None
             assert self.config['shifts_path'] is not None
@@ -259,14 +259,12 @@ class CourseReMinderBot(Bot):
         current_time = datetime.now(tz.gettz('Asia/Shanghai'))
         weekday = current_time.date().weekday()
 
-        if self.start_time.date() != current_time.date() and weekday == 0:
-            self.config['is_single_now'] = not self.config['is_single_now']
-            json.dump(self.config, open(self.config_path, 'w'))
-
         self.class_list = sorted(list(filter(lambda x: x.date >= current_time.date(), self.class_list)))
 
+        first_single_day = datetime.strptime(self.config['first_single_day'], '%Y-%m-%d').date()
+        is_single_now = cal_single(first_single_day, True, current_time.date())
         for curriculum in curricula:
-            if curriculum.is_single == self.config['is_single_now'] and curriculum.weekday == weekday:
+            if curriculum.is_single == is_single_now and curriculum.weekday == weekday:
                 self.class_list.append(curriculum.get_class(current_time.date()))
 
         for shift in shifts:
@@ -324,7 +322,7 @@ class CourseReMinderBot(Bot):
             "title": f'[朋辈辅学反馈收集】',
             "content": "本周的课程都结束啦~\n"
                        "欢迎大家填写问卷反馈[送花花]\n"
-                       "[反馈连接]https://jinshuju.net/f/VoPZf4"
+                       "[反馈连接]https://jinshuju.net/f/C8nzMm"
         })
         next_feedback_time = self.get_next_feedback_time()
         Bot.scheduler.add_job(self.raise_feedback, 'date', next_run_time=next_feedback_time)
