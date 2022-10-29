@@ -64,4 +64,10 @@ python -m src.main --test
 conda(pip) install pipreqs
 pipreqs --encoding=utf8 ~/DingBot  # 检测依赖包
 conda(pip) install -r ~/DingBot/requirements.txt  # 安装依赖包
+
+# 服务器无法连接 git
+remote: git reset --hard $HEAD # 清除远程修改过的代码
+local: git push ssh://[host]//home/pbfx/DingBot master # 本地 push 到远程
+remote: git config receive.denyCurrentBranch ignore # 如果上一条命令报错，则执行本命令后再跑上一条
+remote: git reset --hard $HEAD # 同步 push 过去的代码
 ```
