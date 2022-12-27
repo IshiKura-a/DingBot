@@ -102,44 +102,48 @@ class QuestionBot(Bot):
             return util.parse_time(self.config['last_question_timestamp'])
 
     def check_question(self):
-        last_time = self.get_last_question_time()
-        current_time = datetime.now(tz.gettz('Asia/Shanghai')).strftime("%Y-%m-%d %H:%M:%S")
-        data_url = self.config['questionnaire_url']
-        page = requests.get(data_url).content.decode(encoding='UTF-8')
-        soup = BeautifulSoup(page, features="html.parser")
-        table = soup.find(attrs={'class': 'table-content'}).find_all('tr')[1:]
+        # recover from network failure
+        try:
+            last_time = self.get_last_question_time()
+            current_time = datetime.now(tz.gettz('Asia/Shanghai')).strftime("%Y-%m-%d %H:%M:%S")
+            data_url = self.config['questionnaire_url']
+            page = requests.get(data_url).content.decode(encoding='UTF-8')
+            soup = BeautifulSoup(page, features="html.parser")
+            table = soup.find(attrs={'class': 'table-content'}).find_all('tr')[1:]
 
-        data = []
-        for row in table:
-            href = ''
-            upload_time = None
-            for column in row.find_all('td'):
-                result = column.find('a')
-                if result is not None:
-                    href = result.attrs['href']
-                else:
-                    result = column.find('div')
-                    upload_time = util.parse_time(result.attrs['title'])
-            if last_time is None or last_time < upload_time:
-                data.append({
-                    'href': href,
-                    'time': upload_time
+            data = []
+            for row in table:
+                href = ''
+                upload_time = None
+                for column in row.find_all('td'):
+                    result = column.find('a')
+                    if result is not None:
+                        href = result.attrs['href']
+                    else:
+                        result = column.find('div')
+                        upload_time = util.parse_time(result.attrs['title'])
+                if last_time is None or last_time < upload_time:
+                    data.append({
+                        'href': href,
+                        'time': upload_time
+                    })
+
+            logging.info(f'Got {len(data)} new questions')
+            questions = process_map(util.download, data)
+
+            for i in range(len(questions)):
+                self.send_msg('markdown', {
+                    "title": f'[朋辈辅学] {data[i]["time"].strftime("%Y-%m-%d %H:%M:%S")}',
+                    "text": questions[i].replace('\r\n', '\n') + f'\n'
                 })
 
-        logging.info(f'Got {len(data)} new questions')
-        questions = process_map(util.download, data)
+            self.config['last_question_timestamp'] = current_time
+            json.dump(self.config, open(self.config_path, 'w'))
 
-        for i in range(len(questions)):
-            self.send_msg('markdown', {
-                "title": f'[朋辈辅学] {data[i]["time"].strftime("%Y-%m-%d %H:%M:%S")}',
-                "text": questions[i].replace('\r\n', '\n') + f'\n'
-            })
-
-        self.config['last_question_timestamp'] = current_time
-        json.dump(self.config, open(self.config_path, 'w'))
-
-        next_check_time = self.get_next_check_time()
-        Bot.scheduler.add_job(self.check_question, 'date', next_run_time=next_check_time)
+            next_check_time = self.get_next_check_time()
+            Bot.scheduler.add_job(self.check_question, 'date', next_run_time=next_check_time)
+        except ...:
+            pass
 
     def raise_question(self):
         self.send_msg('text', {
@@ -285,7 +289,8 @@ class CourseReMinderBot(Bot):
             if target.date == current_time.date():
                 for i in curricula:
                     if i.name == source.course and i.weekday == source.date.weekday() and i.start == source.start and i.place == source.place:
-                        logging.info(f'{i.name}（{i.place}） shifted from {source.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
+                        logging.info(
+                            f'{i.name}（{i.place}） shifted from {source.date.strftime("%Y-%m-%d")} {i.start.strftime("%H:%M")} to {target.date.strftime("%Y-%m-%d")} {target.start.strftime("%H:%M")}')
                         new_class = i.get_class(current_time.date())
                         new_class.start = shift.target.start
                         new_class.end = shift.target.end
@@ -310,7 +315,8 @@ class CourseReMinderBot(Bot):
         for i in today_class:
             Bot.scheduler.add_job(
                 self.send_msg, 'date',
-                next_run_time=datetime.combine(i.date, i.start, tzinfo=tz.gettz('Asia/Shanghai')) - timedelta(minutes=15),
+                next_run_time=datetime.combine(i.date, i.start, tzinfo=tz.gettz('Asia/Shanghai')) - timedelta(
+                    minutes=15),
                 args=['text', {
                     'content': f'课程: {i.name}[{i.teacher}][{i.place}, {i.start.strftime("%H:%M")}-{i.end.strftime("%H:%M")}]即将开始，老师同学们不要忘啦[微笑]'
                 }])

@@ -36,7 +36,7 @@
 #### 如何运行
 ```shell
 # 每次运行前请确保 input/shift.csv, input/timetable.csv 数据正确
-# 并确保 config/course_reminder_bot.config 中单双周配置正确
+# 并确保 config/course_reminder_bot.config 中起始单周日期配置正确
 # input/shift.csv 需要手动输入调课信息，格式参考 sample
 # input/timetable.csv 可以由排课表通过 src/utils/timetable2csv.py 生成
 # 排课表格式参考 sample，需要本地 scp 到服务器上
@@ -50,7 +50,7 @@ python timetable2csv.py --input /home/pbfx/input.xlsx --output /home/pbfx/input/
 tmux
 cd ~/DingBot  # 切换工作目录
 conda activate pbfx  # 激活环境
-python -m src.main  # 运行程序
+python -m src.pbfx_main  # 运行程序
 # ctrl+b 唤醒 tmux 后按 d 可以退出，此时可以正常 exit 断开连接
 
 # kill 相关进程
