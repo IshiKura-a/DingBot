@@ -37,6 +37,7 @@
 ```shell
 # 每次运行前请确保 input/shift.csv, input/timetable.csv 数据正确
 # 并确保 config/course_reminder_bot.config 中起始单周日期配置正确
+# 确保 config/question_bot_config.json 中 last_question_timestamp 日期配置正确
 # input/shift.csv 需要手动输入调课信息，格式参考 sample
 # input/timetable.csv 可以由排课表通过 src/utils/timetable2csv.py 生成
 # 排课表格式参考 sample，需要本地 scp 到服务器上
