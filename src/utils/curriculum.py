@@ -35,7 +35,7 @@ class Class(Curriculum):
 
     def __hash__(self):
         return (self.date.strftime('%Y-%m-%d') + self.start.strftime('%H:%M') + self.place + str(
-            self.is_single)).__hash__()
+            self.is_single) + self.name + self.teacher).__hash__()
 
 
 class ShiftInfo:
