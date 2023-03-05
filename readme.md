@@ -59,7 +59,7 @@ ps -aux | grep pbfx | grep main
 kill -9 [PID]
 
 # 运行测试
-python -m src.main --test
+python -m src.pbfx_main --test
 
 # 若存在 package 缺失
 conda(pip) install pipreqs
