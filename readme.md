@@ -55,7 +55,7 @@ python -m src.pbfx_main  # 运行程序
 # ctrl+b 唤醒 tmux 后按 d 可以退出，此时可以正常 exit 断开连接
 
 # kill 相关进程
-ps -aux | grep pbfx | grep main
+ps -aux | grep pbfx_main
 kill -9 [PID]
 
 # 运行测试
